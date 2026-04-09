@@ -23,39 +23,32 @@ const (
 type Client struct {
 	Request  *Request
 	Options  Options
+	VConfig  *config.VirtualClusterConfig
 	skipKeys map[string]struct{}
 }
 
 func (c *Client) Run(ctx context.Context) error {
-	// parse vCluster config
-	vConfig, err := config.ParseConfig(constants.DefaultVClusterConfigLocation, os.Getenv("VCLUSTER_NAME"), nil)
-	if err != nil {
-		if !os.IsNotExist(err) {
-			return fmt.Errorf("parse vCluster config: %w", err)
-		}
-		// Standalone places config at a different path than container deployments.
-		vConfig, err = config.ParseConfig(c.Options.ConfigPath, os.Getenv("VCLUSTER_NAME"), nil)
-		if err != nil {
-			return fmt.Errorf("parse custom standalone vCluster config: %w", err)
-		}
+	if c.VConfig == nil {
+		return fmt.Errorf("snapshot client requires vCluster config")
 	}
 
-	if vConfig.ControlPlane.Standalone.Enabled {
-		vConfig.HostNamespace = constants.StandaloneSnapshotNamespace
-		err = pro.SetStandaloneConstants(vConfig)
+	var err error
+	if c.VConfig.ControlPlane.Standalone.Enabled {
+		c.VConfig.HostNamespace = constants.StandaloneSnapshotNamespace
+		err = pro.SetStandaloneConstants(c.VConfig)
 		if err != nil {
 			return fmt.Errorf("set standalone constants: %w", err)
 		}
 	}
 
 	// make sure to validate options
-	err = ValidateConfigAndOptions(vConfig, &c.Options, false, false)
+	err = ValidateConfigAndOptions(&c.Options, false)
 	if err != nil {
 		return err
 	}
 
 	// create new etcd client
-	etcdClient, err := newEtcdClient(ctx, vConfig, false)
+	etcdClient, err := newEtcdClient(ctx, c.VConfig, false)
 	if err != nil {
 		return fmt.Errorf("failed to create etcd client: %w", err)
 	}
@@ -78,14 +71,9 @@ func (c *Client) Run(ctx context.Context) error {
 }
 
 func (c *Client) List(ctx context.Context) ([]types.Snapshot, error) {
-	// parse vCluster config
-	vConfig, err := config.ParseConfig(constants.DefaultVClusterConfigLocation, os.Getenv("VCLUSTER_NAME"), nil)
-	if err != nil {
-		return nil, err
-	}
-
+	var err error
 	// make sure to validate options
-	err = ValidateConfigAndOptions(vConfig, &c.Options, false, true)
+	err = ValidateConfigAndOptions(&c.Options, true)
 	if err != nil {
 		return nil, err
 	}
@@ -101,14 +89,9 @@ func (c *Client) List(ctx context.Context) ([]types.Snapshot, error) {
 }
 
 func (c *Client) Delete(ctx context.Context) error {
-	// parse vCluster config
-	vConfig, err := config.ParseConfig(constants.DefaultVClusterConfigLocation, os.Getenv("VCLUSTER_NAME"), nil)
-	if err != nil {
-		return err
-	}
-
+	var err error
 	// make sure to validate options
-	err = ValidateConfigAndOptions(vConfig, &c.Options, false, false)
+	err = ValidateConfigAndOptions(&c.Options, false)
 	if err != nil {
 		return err
 	}
@@ -254,7 +237,7 @@ func writeKeyValue(tarWriter *tar.Writer, key, value []byte) error {
 	return nil
 }
 
-func ValidateConfigAndOptions(vConfig *config.VirtualClusterConfig, options *Options, isRestore, isList bool) error {
+func ValidateConfigAndOptions(options *Options, isList bool) error {
 	// storage needs to be either s3 or file
 	err := Validate(options, isList)
 	if err != nil {

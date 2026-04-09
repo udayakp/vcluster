@@ -79,6 +79,7 @@ func (c *Reconciler) reconcileDeletingEtcdBackup(ctx context.Context, configMap 
 	snapshotClient := &Client{
 		Request: snapshotRequest,
 		Options: *snapshotOptions,
+		VConfig: c.vConfig,
 	}
 
 	err = snapshotClient.Delete(ctx)

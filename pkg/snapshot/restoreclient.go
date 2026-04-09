@@ -126,24 +126,16 @@ func (o *RestoreClient) GetSnapshotRequest(ctx context.Context) (*Request, error
 	return nil, ErrSnapshotRequestNotFound
 }
 
-func (o *RestoreClient) Run(ctx context.Context) (retErr error) {
+func (o *RestoreClient) Run(ctx context.Context, vConfig *config.VirtualClusterConfig) (retErr error) {
+	if vConfig == nil {
+		return fmt.Errorf("restore client requires vCluster config")
+	}
+
 	// create decoder and encoder
 	decoder := serializer.NewCodecFactory(scheme.Scheme).UniversalDeserializer()
 	encoder := protobuf.NewSerializer(scheme.Scheme, scheme.Scheme)
 
-	// parse vCluster config
-	vConfig, err := config.ParseConfig(constants.DefaultVClusterConfigLocation, os.Getenv("VCLUSTER_NAME"), nil)
-	if err != nil {
-		if !os.IsNotExist(err) {
-			return fmt.Errorf("parse vCluster config: %w", err)
-		}
-		// Standalone places config at a different path than container deployments.
-		vConfig, err = config.ParseConfig(o.Snapshot.ConfigPath, os.Getenv("VCLUSTER_NAME"), nil)
-		if err != nil {
-			return fmt.Errorf("parse custom standalone vCluster config: %w", err)
-		}
-	}
-
+	var err error
 	if vConfig.ControlPlane.Standalone.Enabled {
 		vConfig.HostNamespace = constants.StandaloneSnapshotNamespace
 		err = pro.SetStandaloneConstants(vConfig)
@@ -153,7 +145,7 @@ func (o *RestoreClient) Run(ctx context.Context) (retErr error) {
 	}
 
 	// make sure to validate options
-	err = ValidateConfigAndOptions(vConfig, &o.Snapshot, true, false)
+	err = ValidateConfigAndOptions(&o.Snapshot, false)
 	if err != nil {
 		return err
 	}

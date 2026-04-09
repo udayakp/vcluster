@@ -399,6 +399,7 @@ func (c *Reconciler) reconcileCreatingEtcdBackup(ctx context.Context, configMap 
 	snapshotClient := &Client{
 		Request: snapshotRequest,
 		Options: *snapshotOptions,
+		VConfig: c.vConfig,
 	}
 	if !c.isHostMode {
 		configMapsToSkip, secretsToSkip, err := c.getOngoingSnapshotRequestsResourceNames(ctx)
